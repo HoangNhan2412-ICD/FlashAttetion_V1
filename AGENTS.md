@@ -1,137 +1,323 @@
-Bạn là coding agent hỗ trợ phát triển dự án:
+Project Scope
 
-FlashAttention-Inspired Streaming Transformer Accelerator on FPGA
+This repository implements a FlashAttention-Inspired Streaming Transformer Attention Core in Verilog.
 
-Mục tiêu dự án:
+The current goal is testbench-only core verification.
 
-* Xây dựng accelerator self-attention lấy cảm hứng từ FlashAttention.
-* Bản đầu tiên chỉ cần chạy simulation đúng.
-* Dùng Verilog RTL, không dùng SystemVerilog phức tạp nếu không cần.
-* Dữ liệu bản đầu:
+This project does not need:
 
-  * SEQ_LEN = 8
-  * D_MODEL = 8
-  * Q/K/V là int8
-  * Accumulator dùng int32
-  * Softmax dùng fixed-point approximation
-* Chưa cần triển khai full Transformer.
-* Chưa cần Wq/Wk/Wv ở milestone đầu. Input top module nhận trực tiếp Q, K, V.
+FPGA board deployment
+SoC integration
+AXI
+DDR
+DMA
+Linux driver
+Bitstream generation
+Real hardware execution
+Full Transformer encoder
+Multi-head attention
+Wq/Wk/Wv projection layers
 
-Quy tắc quan trọng:
+The only required goal is:
 
-1. Không bịa số liệu synthesis, timing, power, resource.
-2. Chưa có report thật thì ghi “Needs verification”.
-3. Không commit thư mục Vivado build như .Xil, .runs, .cache.
-4. Không sửa RTL lớn một lần. Mỗi PR chỉ nên làm một phần rõ ràng.
-5. Mọi module phải có testbench hoặc ít nhất có kế hoạch test.
-6. Mọi thay đổi đáng kể phải cập nhật docs/change_log.md.
-7. Khi viết docs phải nói rõ phần nào đã verified, phần nào chưa verified.
-8. Ưu tiên code dễ hiểu, dễ debug hơn tối ưu quá sớm.
-9. Không dùng IP Vivado phức tạp ở milestone đầu.
-10. Dự án chạy được simulation trước, synthesize sau.
+Q/K/V input vectors
+→ FlashAttention-inspired streaming attention RTL core
+→ Verilog testbench
+→ compare against Python golden output
+→ PASS/FAIL
+Main Technical Target
 
-Cấu trúc repo cần tạo:
+Default configuration:
 
-* rtl/top/attention_top.v
-* rtl/buffers/q_buffer.v
-* rtl/buffers/k_buffer.v
-* rtl/buffers/v_buffer.v
-* rtl/buffers/o_buffer.v
-* rtl/compute/mac_unit.v
-* rtl/compute/dot_product.v
-* rtl/compute/qk_matmul.v
-* rtl/compute/pv_matmul.v
-* rtl/compute/scale_unit.v
-* rtl/softmax/row_max.v
-* rtl/softmax/exp_lut.v
-* rtl/softmax/row_sum.v
-* rtl/softmax/softmax_approx.v
-* rtl/control/attention_fsm.v
-* rtl/control/tile_scheduler.v
-* rtl/common/simple_fifo.v
-* rtl/common/bram_1p.v
-* sim/tb_attention_top.v
-* sim/tb_qk_matmul.v
-* sim/tb_softmax_approx.v
-* sim/tb_pv_matmul.v
-* model/attention_ref.py
-* model/fixed_point_ref.py
-* model/generate_vectors.py
-* vectors/q_input.mem
-* vectors/k_input.mem
-* vectors/v_input.mem
-* vectors/golden_output.mem
-* scripts/run_sim.bat
-* scripts/run_sim.sh
-* scripts/run_vivado_synth.bat
-* scripts/run_vivado_synth.tcl
-* scripts/parse_vivado_reports.py
-* docs/architecture.md
-* docs/dataflow.md
-* docs/fixed_point.md
-* docs/verification_plan.md
-* docs/synthesis_report.md
-* docs/known_issues.md
-* docs/change_log.md
+SEQ_LEN = 8
+D_MODEL = 8
+TILE_N  = 4
+DATA_W  = 8     signed int8 Q/K/V
+ACC_W   = 32    signed score accumulator
+EXP_W   = 16    fixed-point exp / softmax approximation
+OUT_W   = 32    output accumulator
 
-Milestone 1:
+The mathematical target is self-attention:
 
-* Tạo skeleton repo.
-* Tạo README.md giải thích mục tiêu.
-* Tạo docs/architecture.md mô tả pipeline:
-  Q buffer → K buffer → V buffer → QK matmul → softmax approximation → PV matmul → output buffer.
-* Tạo model/attention_ref.py để tính attention bằng Python.
-* Tạo model/generate_vectors.py để sinh Q/K/V/golden output.
-* Tạo rtl/compute/mac_unit.v và testbench tương ứng.
-* Tạo scripts/run_sim.bat để chạy simulation nếu có Icarus Verilog trong PATH.
-* Không cần Vivado synthesis ở milestone 1 nếu chưa đủ RTL.
+Score = Q × K^T
+P     = softmax(Score)
+O     = P × V
 
-Milestone 2:
+The final RTL should be FlashAttention-inspired:
 
-* Implement dot_product.v.
-* Implement qk_matmul.v.
-* Test qk_matmul bằng vector nhỏ.
-* So sánh output với Python golden score.
-* Cập nhật docs/verification_plan.md.
+For each Q row:
+    process K/V by tile
+    compute score tile
+    update online row max
+    update online softmax sum
+    update output accumulator
+    emit output row
 
-Milestone 3:
+The streaming version should avoid relying on a full stored probability matrix when possible.
 
-* Implement softmax approximation:
-  row_max.v
-  exp_lut.v
-  row_sum.v
-  softmax_approx.v
-* Ghi rõ fixed-point format trong docs/fixed_point.md.
-* Test riêng softmax approximation.
-* Không claim softmax chính xác tuyệt đối; ghi rõ là approximation.
+Verification Priority
 
-Milestone 4:
+Correctness is more important than optimization.
 
-* Implement pv_matmul.v.
-* Implement attention_top.v.
-* Test full attention pipeline với Q/K/V 8x8.
-* So sánh output với Python trong tolerance cho phép.
+Priority order:
 
-Milestone 5:
+Python golden model correctness
+RTL module-level correctness
+Full streaming attention testbench correctness
+Fixed-point error tolerance documentation
+Multiple deterministic test cases
+Optional Vivado simulation script
 
-* Tạo Vivado synthesis flow cho KV260 hoặc part xck26-sfvc784-2LV-c.
-* Clock target 100 MHz.
-* Xuất utilization/timing report vào reports/vivado.
-* Tạo parse_vivado_reports.py.
-* Cập nhật docs/synthesis_report.md.
-* Chỉ ghi số liệu thật nếu report tồn tại.
+Vivado synthesis is optional and not required for the current milestone.
 
-Nhiệm vụ ngay bây giờ:
+Required Core Files
 
-1. Đọc repo hiện tại.
-2. Nếu repo trống, tạo cấu trúc thư mục như trên.
-3. Tạo AGENTS.md theo các quy tắc này.
-4. Tạo README.md.
-5. Tạo docs ban đầu.
-6. Tạo Python reference model và vector generator.
-7. Tạo RTL đầu tiên cho mac_unit.v và dot_product.v.
-8. Tạo testbench đơn giản.
-9. Tạo scripts/run_sim.bat.
-10. Chạy các test có thể chạy trong môi trường hiện tại.
-11. Không bịa kết quả nếu không chạy được tool.
-12. Commit thay đổi với message rõ ràng.
+Important Python model files:
+
+model/generate_vectors.py
+model/attention_ref.py
+model/streaming_attention_ref.py
+model/compare_offline_vs_streaming.py
+
+Important RTL files:
+
+rtl/top/streaming_attention_top.v
+rtl/control/streaming_attention_fsm.v
+rtl/compute/score_tile_engine.v
+rtl/compute/weighted_value_accumulator.v
+rtl/softmax/online_softmax_update.v
+
+Existing offline/reference RTL may remain:
+
+rtl/top/attention_top.v
+rtl/compute/mac_unit.v
+rtl/compute/dot_product.v
+rtl/compute/qk_matmul.v
+rtl/compute/pv_matmul.v
+rtl/softmax/row_max.v
+rtl/softmax/exp_lut.v
+rtl/softmax/row_sum.v
+rtl/softmax/softmax_approx.v
+
+Important simulation files:
+
+sim/tb_mac_unit.v
+sim/tb_dot_product.v
+sim/tb_qk_matmul.v
+sim/tb_softmax_approx.v
+sim/tb_attention_top.v
+sim/tb_streaming_attention_top.v
+
+Important vector files:
+
+vectors/q_input.mem
+vectors/k_input.mem
+vectors/v_input.mem
+vectors/golden_score.mem
+vectors/golden_output.mem
+vectors/golden_output_fixed.mem
+vectors/streaming_golden_output.mem
+
+Important report/output files:
+
+reports/sim/streaming_rtl_output.mem
+reports/sim/compare_result.txt
+Required Testbench Behavior
+
+The main testbench is:
+
+sim/tb_streaming_attention_top.v
+
+It must:
+
+Load Q/K/V vectors.
+Drive the streaming attention core.
+Assert start.
+Wait for done.
+Collect output matrix O.
+Compare RTL output against golden output.
+Use a documented tolerance for fixed-point approximation.
+Print clear PASS or FAIL.
+If FAIL, print:
+mismatch count
+max absolute error
+first failing index
+expected value
+actual value
+
+Expected output style:
+
+tb_streaming_attention_top PASS
+mismatch_count = 0
+max_abs_error = ...
+
+or:
+
+tb_streaming_attention_top FAIL
+mismatch_count = ...
+max_abs_error = ...
+Fixed-Point Rules
+
+All fixed-point formats must be documented in:
+
+docs/fixed_point.md
+
+Do not claim exact floating-point equivalence.
+
+If softmax uses LUT or approximation, document:
+
+input range
+output format
+scaling factor
+rounding behavior
+saturation behavior
+allowed tolerance
+
+If output comparison is approximate, write the tolerance clearly in:
+
+testbench comments
+docs/verification_plan.md
+README.md
+Documentation Rules
+
+Always update documentation when functionality changes.
+
+Important docs:
+
+README.md
+docs/architecture.md
+docs/dataflow.md
+docs/fixed_point.md
+docs/verification_plan.md
+docs/change_log.md
+
+Do not overfocus on synthesis reports because this project is currently TB-only.
+
+Only create or update synthesis documentation if specifically requested.
+
+Do Not Fabricate Results
+
+Never invent:
+
+simulation PASS results
+synthesis results
+timing numbers
+LUT/FF/BRAM/DSP numbers
+power numbers
+board execution claims
+
+If a test was not run, write:
+
+Needs verification
+
+If Vivado is unavailable, write:
+
+Vivado simulation requires local verification.
+Artifact Rules
+
+Never commit generated tool artifacts:
+
+xsim.dir/
+.Xil/
+*.jou
+*.log
+*.wdb
+*.pb
+*.vvp
+*.vcd
+*.fst
+*.str
+*.dcp
+*.bit
+*.ltx
+*.xpr
+*.runs/
+*.cache/
+
+Generated reports may be committed only if explicitly requested.
+
+Preferred Simulation Flow
+
+Preferred Windows local simulation:
+
+scripts\run_core_tb_vivado.bat
+
+This script should focus on:
+
+tb_streaming_attention_top
+
+A broader regression script may exist:
+
+scripts\run_sim_vivado.bat
+
+This can run:
+
+tb_mac_unit
+tb_dot_product
+tb_qk_matmul
+tb_softmax_approx
+tb_attention_top
+tb_streaming_attention_top
+
+But the most important one is:
+
+tb_streaming_attention_top
+Current Milestone
+
+The current milestone is:
+
+TB-only verification closure for FlashAttention-inspired streaming attention core.
+
+Tasks:
+
+Ensure Python streaming golden model exists.
+Ensure streaming RTL core exists.
+Ensure tb_streaming_attention_top.v compares RTL output to golden.
+Ensure tolerance is documented.
+Ensure PASS/FAIL is printed clearly.
+Ensure no FPGA/SoC/AXI/DDR/DMA work is added.
+Ensure generated artifacts are ignored.
+Ensure README explains how to run the core testbench.
+Next Milestone After Core TB Passes
+
+After tb_streaming_attention_top passes, the next useful work is more verification:
+
+test_all_zero_vectors
+test_identity_like_vectors
+test_random_seed_vectors
+test_mixed_positive_negative_vectors
+test_large_score_range_vectors
+test_tile_size_1_2_4_8
+
+Do not move to AXI, DDR, DMA, or board deployment unless explicitly requested.
+
+Commit Rules
+
+Keep commits focused.
+
+Good commit messages:
+
+Add streaming attention golden model
+Add streaming attention core testbench
+Fix fixed-point output comparison tolerance
+Add Vivado core test runner
+Document TB-only verification scope
+
+Bad commit style:
+
+big update
+final
+fix all
+random changes
+Agent Behavior
+
+When asked to modify the project:
+
+Read this file first.
+Check current repository state.
+Make the smallest useful change.
+Prefer correctness over optimization.
+Run available tests.
+Report exactly what was tested.
+Do not claim unrun tests passed.
+Do not add hardware deployment features unless explicitly requested.
