@@ -1,26 +1,17 @@
-﻿# Python
-__pycache__/
-*.pyc
-
-# Simulation
-*.vcd
-*.vvp
-*.fst
+﻿*.jou
 *.log
-
-# Vivado
-.Xil/
-*.jou
 *.str
-*.dcp
+*.tmp
+*.wdb
+*.vcd
 *.bit
 *.ltx
-*.xpr
-*.runs/
-*.cache/
-build/
+*.dcp
 
-# Reports generated locally
-reports/vivado/*.rpt
-reports/vivado/*.json
-reports/sim/*.log
+.cache/
+.hw/
+.ip_user_files/
+.runs/
+.sim/
+.gen/
+.Xil/
