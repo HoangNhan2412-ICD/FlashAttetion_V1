@@ -1,17 +1,61 @@
-*.jou
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# Editors and OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Simulation artifacts
+*.vcd
+*.fst
+*.wdb
+*.lxt
+*.lxt2
+*.out
+*.vvp
+sim_build/
+reports/sim/*
+!reports/sim/.gitkeep
+
+# Logs and temporary files
 *.log
+*.jou
 *.str
 *.tmp
-*.wdb
-*.vcd
-*.bit
-*.ltx
-*.dcp
+*.bak
 
+# Vivado generated files and build directories
+.Xil/
 .cache/
 .hw/
 .ip_user_files/
 .runs/
 .sim/
 .gen/
-.Xil/
+*.bit
+*.ltx
+*.dcp
+*.rpt
+*.pb
+*.xpr
+*.xsa
+*.runs/
+*.cache/
+reports/vivado/*
+!reports/vivado/.gitkeep
